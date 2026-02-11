@@ -3,7 +3,6 @@ import {
     ChevronRight, 
     ChevronLeft, 
     Save, 
-    CheckCircle2, 
     Loader2,
     Calendar,
     ChevronDown,
@@ -12,7 +11,8 @@ import {
     X,
     AlertTriangle,
     FileText,
-    Edit3
+    Edit3,
+    CheckCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { EducationLevel, FormData, Question, QuestionType, FormSection } from '../types';
@@ -46,9 +46,10 @@ interface ExtendedSection extends FormSection {
 const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<FormData>({});
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openMonths, setOpenMonths] = useState<Record<string, boolean>>({});
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   
   // Subject States
   const [splitMapeh, setSplitMapeh] = useState(false);
@@ -223,28 +224,39 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
   const handleInputChange = (id: string, value: string | number) => {
     // Changing Quarter Logic
     if (id === 'quarter') {
-        const prevQuarter = formData['quarter'] || 'Q1';
+        const prevQuarter = (formData['quarter'] as string) || 'Q1';
         
         // If value is same, do nothing to avoid unnecessary processing
         if (value === prevQuarter) return;
 
-        const confirmChange = window.confirm(
-            "Changing the quarter will reset Monthly Learners' Movement data. Continue?"
-        );
-        if (!confirmChange) return;
-
-        const oldQuarter = prevQuarter as string;
+        const oldQuarter = prevQuarter;
         const oldRanges = QUARTER_DATE_RANGES[oldQuarter] || [];
         
+        // Check if there is actual movement data associated with the old quarter
+        // We look for keys ending in the date ranges of the old quarter
+        const hasDataToLose = Object.keys(formData).some(key => 
+            oldRanges.some(r => key.endsWith(`_${r}`))
+        );
+
+        // Only show confirmation if data will actually be deleted
+        if (hasDataToLose) {
+             const confirmChange = window.confirm(
+                "Changing the quarter will reset Monthly Learners' Movement data. Continue?"
+            );
+            if (!confirmChange) return;
+        }
+
         const newData = { ...formData };
         newData[id] = value; 
 
-        // Cleanup old movement data
-        Object.keys(newData).forEach(key => {
-            if (oldRanges.some(r => key.endsWith(`_${r}`))) {
-                delete newData[key];
-            }
-        });
+        // Cleanup old movement data if applicable
+        if (hasDataToLose) {
+            Object.keys(newData).forEach(key => {
+                if (oldRanges.some(r => key.endsWith(`_${r}`))) {
+                    delete newData[key];
+                }
+            });
+        }
 
         setFormData(newData);
     } else {
@@ -307,11 +319,20 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("No authenticated user found.");
+    setSubmissionError(null);
+    console.log("Starting submission process...");
 
-        // Construct Failures Data Structure
+    try {
+        // 1. Auth Check
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) throw new Error("Authentication failed. Please sign in again.");
+
+        // 2. Basic Validation
+        if (!formData['schoolName']) {
+            throw new Error("School Name is required. Please check Basic Information.");
+        }
+
+        // 3. Construct Failures Data Structure
         const failuresBySubject: Array<{ subjectName: string; subjectSource: string; failedCount: number }> = [];
 
         if (levelId === EducationLevel.SHS) {
@@ -330,13 +351,16 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
                 });
             });
         } else if (hasSubjectFailures) {
-            // Logic for other levels (simplified construction based on active views)
             let subjects: string[] = [];
             if (levelId === EducationLevel.KINDER) subjects = SUBJECTS_KINDER;
             else if (levelId === EducationLevel.ELEM || levelId === EducationLevel.JHS) {
                  subjects = [...SUBJECTS_ELEM_JHS_BASE];
-                 if (levelId === EducationLevel.ELEM) subjects = subjects.map(s => s === 'EPP / TLE' ? 'EPP' : s);
-                 else subjects = subjects.map(s => s === 'EPP / TLE' ? 'TLE' : s);
+                 if (levelId === EducationLevel.ELEM) {
+                     subjects = subjects.map(s => s === 'EPP / TLE' ? 'EPP' : s);
+                 } else {
+                     subjects = subjects.map(s => s === 'EPP / TLE' ? 'TLE' : s);
+                     subjects = subjects.filter(s => s !== 'Mother Tongue');
+                 }
                  if (splitMapeh) subjects = subjects.filter(s => s !== 'MAPEH').concat(MAPEH_COMPONENTS);
             }
             
@@ -349,47 +373,116 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
             });
         }
 
-        const { error } = await supabase.from('mea_reports').insert({
-            user_id: user.id,
-            level: levelId,
-            school_year: formData['sy'],
-            quarter: formData['quarter'],
-            content: { 
-                ...formData, 
-                failuresBySubject, // Explicitly store the array
-                _meta: { 
-                    splitMapeh, 
+        // 4. Construct Monthly Learners Movement Data
+        const monthlyLearnersMovement: any[] = [];
+        const ranges = QUARTER_DATE_RANGES[formData['quarter'] as string] || [];
+        
+        ranges.forEach(r => {
+            let enrollKey = `enroll_total_${r}`;
+            let inKey = `move_in_${r}`;
+            let outKey = `move_out_${r}`;
+
+            if (levelId === EducationLevel.KINDER) {
+                enrollKey = `k_total_${r}`;
+                inKey = `k_trans_in_${r}`;
+                outKey = `k_trans_out_${r}`;
+            } else if (levelId === EducationLevel.ALS) {
+                enrollKey = `als_total_${r}`;
+                inKey = `als_in_${r}`;
+                outKey = `als_out_${r}`;
+            }
+
+            const enrollment = getSafeNumber(formData[enrollKey]);
+            const transIn = getSafeNumber(formData[inKey]);
+            const transOut = getSafeNumber(formData[outKey]);
+
+            // Always push structure for consistent reading
+            monthlyLearnersMovement.push({
+                range: r,
+                enrollment: enrollment,
+                transferred_in: transIn,
+                transferred_out: transOut
+            });
+        });
+
+        // 5. Prepare Payload
+        const submissionPayload: any = {
+            user_id: user.id, // Included as verified user exists
+            school_name: formData['schoolName'],
+            district: formData['district'] || 'Bacong',
+            school_year: formData['sy'] || '2025-2026', 
+            quarter: formData['quarter'] || 'Q1',
+            form_type: levelId,
+            submitted_by: formData['respondentName'], 
+            monthly_learners_movement: monthlyLearnersMovement,
+            failures_by_subject: failuresBySubject,
+            content: {
+                ...formData,
+                _meta: {
+                    splitMapeh,
                     customSubjects,
                     shsLibrarySelection,
                     shsQuickMode
-                } 
+                }
             }
-        });
+        };
 
-        if (error) throw error;
+        console.log("Submitting payload:", submissionPayload);
+
+        // 6. Insert into Supabase
+        const { error: dbError } = await supabase
+            .from('mea_submissions')
+            .insert(submissionPayload);
+
+        if (dbError) {
+             console.error("DB Insert Error:", dbError);
+             throw dbError;
+        }
+        
+        console.log("Submission successful!");
+
+        // 7. Cleanup and Success
         localStorage.removeItem(`mea_draft_${levelId}`);
-        setIsSubmitted(true);
-        window.scrollTo(0, 0);
+        
+        // --- SUCCESS MODAL TRIGGER ---
+        setShowSuccessModal(true);
 
     } catch (error: any) {
-        alert("Failed to submit report: " + error.message);
+        console.error("Submission Error Details:", error);
+        // Show Error Modal with exact message
+        setSubmissionError(error.message || JSON.stringify(error));
     } finally {
         setIsSubmitting(false);
     }
   };
 
   const handleNext = () => {
-    // Required field validation for Profile
-    if (currentStep === 0) {
-        const missing = allSections[0].questions.filter(q => q.required && !formData[q.id]);
-        if (missing.length > 0) {
-            alert(`Please fill in: ${missing.map(q => q.label).join(', ')}`);
-            return;
+    const currentSection = allSections[currentStep];
+
+    // Generic validation for required fields in the current section
+    const missing = currentSection.questions.filter(q => {
+        if (q.type === QuestionType.HEADER || q.type === QuestionType.READ_ONLY) return false;
+        
+        // Check if required
+        if (!q.required) return false;
+        
+        const val = formData[q.id];
+        // 0 is valid for numbers. Empty string, undefined, or null is invalid.
+        return val === undefined || val === null || val === '';
+    });
+
+    if (missing.length > 0) {
+        // If it's just a few fields, list them (limit to first 3 for UI cleanliness)
+        if (missing.length <= 3) {
+            alert(`Please fill in the following required fields: ${missing.map(q => q.label).join(', ')}`);
+        } else {
+            alert("Please fill in all required fields before proceeding.");
         }
+        return;
     }
 
     // Validation for SHS Subjects
-    if (levelId === EducationLevel.SHS && allSections[currentStep].id === 'failures_by_subject') {
+    if (levelId === EducationLevel.SHS && currentSection.id === 'failures_by_subject') {
         if (shsLibrarySelection.length === 0 && customSubjects.length === 0) {
             alert("No subjects selected. Please add at least one subject you teach.");
             return;
@@ -405,7 +498,8 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
   };
 
   // --- Renderers ---
-
+  // (Input renderers omitted for brevity, they are unchanged)
+  
   const renderQuestionInput = (q: ExtendedQuestion) => {
     const value = formData[q.id] ?? '';
 
@@ -452,7 +546,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
     );
   };
 
-  // SHS Specific Renderer
   const renderShsSubjectSelection = () => {
       const filteredLibrary = SUBJECTS_SHS_CORE.filter(s => 
           s.toLowerCase().includes(shsSearchTerm.toLowerCase())
@@ -627,7 +720,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
       );
   };
 
-  // Generic Subject Failures Renderer (Kinder, Elem, JHS)
   const renderSubjectFailures = () => {
       // Branch to SHS specific renderer
       if (levelId === EducationLevel.SHS) {
@@ -645,6 +737,8 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
               subjects = subjects.map(s => s === 'EPP / TLE' ? 'EPP' : s);
           } else {
               subjects = subjects.map(s => s === 'EPP / TLE' ? 'TLE' : s);
+              // Remove Mother Tongue for JHS
+              subjects = subjects.filter(s => s !== 'Mother Tongue');
           }
           
           if (splitMapeh) {
@@ -708,7 +802,10 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
           else if (levelId === EducationLevel.ELEM || levelId === EducationLevel.JHS) {
                subjects = [...SUBJECTS_ELEM_JHS_BASE];
                if (levelId === EducationLevel.ELEM) subjects = subjects.map(s => s === 'EPP / TLE' ? 'EPP' : s);
-               else subjects = subjects.map(s => s === 'EPP / TLE' ? 'TLE' : s);
+               else {
+                   subjects = subjects.map(s => s === 'EPP / TLE' ? 'TLE' : s);
+                   subjects = subjects.filter(s => s !== 'Mother Tongue');
+               }
                if (splitMapeh) subjects = subjects.filter(s => s !== 'MAPEH').concat(MAPEH_COMPONENTS);
           }
           subjects.forEach(subj => {
@@ -823,109 +920,48 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
           });
       }
 
-      return Object.keys(groupedByMonth).map(month => (
-          <div key={month} className="mb-4 border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
-              <button 
-                  onClick={() => setOpenMonths(p => ({...p, [month]: !p[month]}))}
-                  className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-              >
-                  <div className="flex items-center space-x-2">
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                      <span className="font-semibold text-gray-800">{month}</span>
-                  </div>
-                  {openMonths[month] ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
-              </button>
-              
-              {openMonths[month] && (
-                  <div className="p-6 border-t border-gray-200 animate-fade-in">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {groupedByMonth[month].map(q => (
-                              <div key={q.id}>
-                                  {renderQuestionInput(q)}
-                              </div>
-                          ))}
-                      </div>
-                  </div>
-              )}
-          </div>
-      ));
+      return (
+        <div className="space-y-4">
+            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p className="text-sm text-blue-700 font-medium">
+                    These month/date entries are automatically generated from the selected quarter ({currentQuarter}).
+                </p>
+            </div>
+            {Object.keys(groupedByMonth).map(month => (
+                <div key={month} className="mb-4 border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                    <button 
+                        onClick={() => setOpenMonths(p => ({...p, [month]: !p[month]}))}
+                        className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                        <div className="flex items-center space-x-2">
+                            <Calendar className="w-5 h-5 text-blue-600" />
+                            <span className="font-semibold text-gray-800">{month}</span>
+                        </div>
+                        {openMonths[month] ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
+                    </button>
+                    
+                    {openMonths[month] && (
+                        <div className="p-6 border-t border-gray-200 animate-fade-in">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {groupedByMonth[month].map(q => (
+                                    <div key={q.id}>
+                                        {renderQuestionInput(q)}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
+      );
   };
-
-  // --- Summary View ---
-  const renderSummary = () => {
-    const config = LEVEL_CONFIGS[levelId];
-    const isSchoolHead = levelId === EducationLevel.SCHOOL_HEAD;
-    // Use derived state
-    const quarter = currentQuarter;
-    const ranges = QUARTER_DATE_RANGES[quarter] || [];
-
-    // Enrollment / Movement
-    let totalEnrollment = 0;
-    let totalIn = 0;
-    let totalOut = 0;
-
-    if (!isSchoolHead) {
-        // Use latest non-zero enrollment
-        for (let i = ranges.length - 1; i >= 0; i--) {
-            const r = ranges[i];
-            const val = getSafeNumber(formData[`enroll_total_${r}`] || formData[`k_total_${r}`] || formData[`als_total_${r}`]);
-            if (val > 0) {
-                totalEnrollment = val;
-                break;
-            }
-        }
-        ranges.forEach(r => {
-             totalIn += getSafeNumber(formData[`move_in_${r}`] || formData[`k_trans_in_${r}`] || formData[`als_in_${r}`]);
-             totalOut += getSafeNumber(formData[`move_out_${r}`] || formData[`k_trans_out_${r}`] || formData[`als_out_${r}`]);
-        });
-    }
-
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 flex items-start space-x-4">
-          <CheckCircle2 className="h-6 w-6 text-green-600 mt-1" />
-          <div>
-            <h2 className="text-xl font-bold text-green-800">Submission Successful!</h2>
-            <p className="text-green-700">Your MEA data for {config.label} has been saved.</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                <p className="text-sm font-medium text-gray-500">Latest Enrollment</p>
-                <p className="text-3xl font-bold text-blue-600">{isSchoolHead ? (formData['enrollment_bosy'] || 0) : totalEnrollment}</p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                <p className="text-sm font-medium text-gray-500">Total Transferred IN</p>
-                <p className="text-3xl font-bold text-green-600">{totalIn}</p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-                <p className="text-sm font-medium text-gray-500">Total Transferred OUT</p>
-                <p className="text-3xl font-bold text-red-600">{totalOut}</p>
-            </div>
-        </div>
-
-        <div className="flex justify-center space-x-4 pt-8">
-            <button onClick={onBack} className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-medium">
-                Return to Dashboard
-            </button>
-            <button onClick={() => window.print()} className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
-                Print Report
-            </button>
-        </div>
-      </div>
-    );
-  };
-
-  if (isSubmitted) {
-    return renderSummary();
-  }
 
   const currentSection = allSections[currentStep];
   const config = LEVEL_CONFIGS[levelId];
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto relative">
       <div className="mb-6 flex items-center justify-between">
          <div>
             <h2 className="text-2xl font-bold text-gray-900">{config.label}</h2>
@@ -977,7 +1013,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
                     className="rounded-md bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 flex items-center disabled:opacity-50"
                 >
                     {isSubmitting ? (
-                        <>Saving <Loader2 className="h-4 w-4 ml-2 animate-spin"/></>
+                        <>Saving... <Loader2 className="h-4 w-4 ml-2 animate-spin"/></>
                     ) : (
                         <>{currentStep === allSections.length - 1 ? 'Submit MEA' : 'Next'} <ChevronRight className="h-4 w-4 ml-1" /></>
                     )}
@@ -985,6 +1021,46 @@ const DynamicForm: React.FC<DynamicFormProps> = ({ levelId, onBack }) => {
             </div>
         </div>
       </div>
+
+      {/* ERROR MODAL */}
+      {submissionError && (
+          <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 animate-fade-in backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4 text-center transform transition-all scale-100">
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-6">
+                <AlertTriangle className="h-10 w-10 text-red-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Submission Failed</h3>
+              <p className="text-gray-500 mb-6 text-sm">{submissionError}</p>
+              <button
+                onClick={() => setSubmissionError(null)}
+                className="w-full inline-flex justify-center items-center rounded-lg border border-transparent shadow-md px-4 py-3 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all hover:scale-[1.02]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+      )}
+
+      {/* SUCCESS MODAL */}
+      {showSuccessModal && (
+          <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50 animate-fade-in backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4 text-center transform transition-all scale-100">
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-6">
+                <CheckCircle className="h-10 w-10 text-green-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">SMEA Successfully Saved</h3>
+              <p className="text-gray-500 mb-6 text-sm leading-relaxed">
+                Your MEA submission has been stored. View it in Report Generator using the same School and Quarter.
+              </p>
+              <button
+                onClick={onBack}
+                className="w-full inline-flex justify-center items-center rounded-lg border border-transparent shadow-md px-4 py-3 bg-blue-900 text-base font-medium text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all hover:scale-[1.02]"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+      )}
     </div>
   );
 };

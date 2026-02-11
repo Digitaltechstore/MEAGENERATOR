@@ -11,22 +11,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     await supabase.auth.signOut();
   };
 
+  // Official Bacong District Seal (Public Raw Link)
+  const LOGO_URL = "https://raw.githubusercontent.com/Digitaltechstore/MEAGENERATOR/main/SEF%20FUNDED%20(6).png";
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       {/* Header */}
       <header className="bg-blue-900 text-white shadow-lg sticky top-0 z-50 border-b-4 border-yellow-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center space-x-4 mb-4 md:mb-0">
-            <div className="relative">
-                <div className="absolute inset-0 bg-white rounded-full m-1 opacity-20 blur-sm"></div>
+            <div className="relative group">
+                <div className="absolute inset-0 bg-white rounded-full m-1 opacity-20 blur-sm group-hover:opacity-30 transition-opacity"></div>
                 <img 
-                    src="/bacong-logo.png" 
+                    src={LOGO_URL}
                     alt="Bacong District Logo" 
-                    className="h-14 w-14 rounded-full bg-white p-0.5 shadow-md relative z-10"
-                    onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement!.innerHTML = '<div class="h-14 w-14 rounded-full bg-white flex items-center justify-center text-blue-900 font-bold border-2 border-yellow-400">BD</div>';
-                    }}
+                    className="h-16 w-16 rounded-full bg-white p-1 shadow-md relative z-10 object-contain"
                 />
             </div>
             <div>

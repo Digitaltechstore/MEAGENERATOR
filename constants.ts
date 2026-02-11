@@ -106,10 +106,10 @@ const TEACHER_MOVEMENT_SECTION: FormSection = {
   title: "Monthly Learners' Movement",
   description: "Enter enrollment data for the specific dates below (based on SY 2025-2026 Quarters).",
   questions: [
-    { id: 'enroll_total', label: 'Enrollment of the Month', type: QuestionType.NUMBER },
-    { id: 'move_in', label: 'Transferred IN', type: QuestionType.NUMBER },
-    { id: 'move_out', label: 'Transferred OUT', type: QuestionType.NUMBER },
-    { id: 'move_nlpa', label: 'Classified as NLPA', type: QuestionType.NUMBER },
+    { id: 'enroll_total', label: 'Enrollment of the Month', type: QuestionType.NUMBER, required: true },
+    { id: 'move_in', label: 'Transferred IN', type: QuestionType.NUMBER, required: true },
+    { id: 'move_out', label: 'Transferred OUT', type: QuestionType.NUMBER, required: true },
+    { id: 'move_nlpa', label: 'Classified as NLPA', type: QuestionType.NUMBER, required: true },
   ],
 };
 
@@ -189,10 +189,10 @@ export const LEVEL_CONFIGS: Record<EducationLevel, LevelConfig> = {
         title: 'Monthly Learners Movement',
         description: "Enter enrollment data for the specific dates below (based on SY 2025-2026 Quarters).",
         questions: [
-            { id: 'k_total', label: 'Total Kindergarten Enrollment', type: QuestionType.NUMBER },
-            { id: 'k_trans_in', label: 'Learners Transferred IN', type: QuestionType.NUMBER },
-            { id: 'k_trans_out', label: 'Learners Transferred OUT', type: QuestionType.NUMBER },
-            { id: 'k_nlpa', label: 'Learners Classified as NLPA', type: QuestionType.NUMBER },
+            { id: 'k_total', label: 'Total Kindergarten Enrollment', type: QuestionType.NUMBER, required: true },
+            { id: 'k_trans_in', label: 'Learners Transferred IN', type: QuestionType.NUMBER, required: true },
+            { id: 'k_trans_out', label: 'Learners Transferred OUT', type: QuestionType.NUMBER, required: true },
+            { id: 'k_nlpa', label: 'Learners Classified as NLPA', type: QuestionType.NUMBER, required: true },
         ]
       },
       {
@@ -289,10 +289,10 @@ export const LEVEL_CONFIGS: Record<EducationLevel, LevelConfig> = {
             title: 'Monthly Learners Movement',
             description: "Enter enrollment data for the specific dates below (based on SY 2025-2026 Quarters).",
             questions: [
-                { id: 'als_total', label: 'Total ALS Enrollment', type: QuestionType.NUMBER },
-                { id: 'als_in', label: 'Transferred IN', type: QuestionType.NUMBER },
-                { id: 'als_out', label: 'Transferred OUT', type: QuestionType.NUMBER },
-                { id: 'als_nlpa', label: 'Classified as NLPA', type: QuestionType.NUMBER },
+                { id: 'als_total', label: 'Total ALS Enrollment', type: QuestionType.NUMBER, required: true },
+                { id: 'als_in', label: 'Transferred IN', type: QuestionType.NUMBER, required: true },
+                { id: 'als_out', label: 'Transferred OUT', type: QuestionType.NUMBER, required: true },
+                { id: 'als_nlpa', label: 'Classified as NLPA', type: QuestionType.NUMBER, required: true },
                 { id: 'als_fail_drop', label: 'Learners who Failed/Dropped', type: QuestionType.NUMBER },
             ]
         }
