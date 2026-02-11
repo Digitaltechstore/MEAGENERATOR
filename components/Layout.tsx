@@ -16,8 +16,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      {/* Header */}
-      <header className="bg-blue-900 text-white shadow-lg sticky top-0 z-50 border-b-4 border-yellow-400">
+      {/* Header - Now Dark Navy Blue */}
+      <header className="bg-blue-950 text-white shadow-lg sticky top-0 z-50 border-b-4 border-yellow-400">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center space-x-4 mb-4 md:mb-0">
             <div className="relative group">
@@ -40,7 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
              </div>
              <button 
                 onClick={handleSignOut}
-                className="flex items-center px-4 py-2 bg-blue-800 hover:bg-blue-700 rounded-lg text-sm transition-all border border-blue-700 shadow-sm hover:shadow group"
+                className="flex items-center px-4 py-2 bg-blue-900 hover:bg-blue-800 rounded-lg text-sm transition-all border border-blue-800 shadow-sm hover:shadow group"
                 title="Sign Out"
              >
                 <LogOut className="w-4 h-4 mr-2 group-hover:text-yellow-400 transition-colors" />

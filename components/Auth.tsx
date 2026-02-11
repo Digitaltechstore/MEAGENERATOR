@@ -45,8 +45,8 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-      {/* Top Blue Background */}
-      <div className="w-full h-[30vh] min-h-[220px] bg-blue-900 border-b-[6px] border-yellow-400 relative flex flex-col items-center justify-center pb-12">
+      {/* Top Blue Background - Now Dark Navy Blue */}
+      <div className="w-full h-[35vh] min-h-[250px] bg-blue-950 border-b-[6px] border-yellow-400 relative flex flex-col items-center justify-center pb-16">
           <button 
             onClick={onBack}
             className="absolute top-8 left-8 flex items-center text-white/80 hover:text-white transition-colors z-20 text-sm font-medium"
@@ -66,14 +66,14 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
       </div>
 
       {/* Main Content Area - Shifted up to overlap */}
-      <div className="flex-grow flex flex-col items-center -mt-24 px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="flex-grow flex flex-col items-center -mt-32 px-4 sm:px-6 lg:px-8 relative z-10">
         
-        {/* Logo overlapping the line */}
+        {/* Logo overlapping the line - made significantly bigger */}
         <div className="mb-6 filter drop-shadow-2xl">
             <img 
                 src={LOGO_URL}
                 alt="Logo" 
-                className="h-48 w-48 object-contain"
+                className="h-64 w-64 object-contain"
             />
         </div>
 
@@ -134,7 +134,7 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-900 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 disabled:opacity-50 transition-all"
+                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-950 hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-900 disabled:opacity-50 transition-all"
               >
                 {loading ? <Loader2 className="animate-spin h-5 w-5" /> : (isLogin ? 'Sign in' : 'Sign up')}
               </button>

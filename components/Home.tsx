@@ -19,6 +19,9 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ onSelectLevel, onOpenReports }) => {
     const [showHighSchoolOptions, setShowHighSchoolOptions] = useState(false);
     
+    // Official Bacong District Seal (Public Raw Link)
+    const LOGO_URL = "https://raw.githubusercontent.com/Digitaltechstore/MEAGENERATOR/main/SEF%20FUNDED%20(6).png";
+
     const menuItems = [
         { id: EducationLevel.KINDER, label: 'Kindergarten', icon: Baby, color: 'bg-pink-500' },
         { id: EducationLevel.SPED, label: 'SPED', icon: Accessibility, color: 'bg-purple-500' },
@@ -44,6 +47,11 @@ const Home: React.FC<HomeProps> = ({ onSelectLevel, onOpenReports }) => {
                     >
                         <ArrowLeft className="w-5 h-5 mr-2" /> Back to Menu
                     </button>
+                    <img 
+                        src={LOGO_URL} 
+                        alt="Bacong District Logo" 
+                        className="mx-auto h-20 w-20 object-contain mb-4 drop-shadow-md"
+                    />
                     <h2 className="text-3xl font-bold tracking-tight text-blue-900 sm:text-4xl">
                         High School Department
                     </h2>
@@ -81,6 +89,11 @@ const Home: React.FC<HomeProps> = ({ onSelectLevel, onOpenReports }) => {
     return (
         <div className="flex flex-col items-center w-full animate-fade-in pb-12">
             <div className="text-center max-w-3xl mx-auto mb-12">
+                <img 
+                    src={LOGO_URL} 
+                    alt="Bacong District Logo" 
+                    className="mx-auto h-28 w-28 object-contain mb-6 drop-shadow-xl"
+                />
                 <h2 className="text-3xl font-bold tracking-tight text-blue-900 sm:text-4xl">
                     Select Your Role / Level
                 </h2>
